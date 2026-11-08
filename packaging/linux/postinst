@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+  modprobe i2c-dev 2>/dev/null || true
+  if command -v udevadm >/dev/null; then
+    udevadm control --reload-rules || true
+    udevadm trigger --subsystem-match=i2c-dev --action=change || true
+  fi
+fi

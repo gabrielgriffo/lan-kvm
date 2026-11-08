@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=lan-kvm
+Comment=Receptor de teclado e mouse do lan-kvm
+Icon=lan-kvm
+TryExec=/usr/libexec/lan-kvm/receiver
+Exec=/usr/libexec/lan-kvm/receiver
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

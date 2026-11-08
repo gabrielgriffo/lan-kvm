@@ -1,0 +1,12 @@
+[package]
+name = "lan-kvm-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+getrandom = { version = "0.3", features = ["std"] }
+sha2 = "0.10"
+snow = { version = "0.10", default-features = false, features = ["use-chacha20poly1305", "use-curve25519", "use-getrandom", "use-sha2"] }
+spake2 = "0.4"
