@@ -7,7 +7,7 @@
   </h1>
 
   <p>
-    Um teclado e um mouse para um PC com Windows e um notebook com Linux na mesma rede, com o monitor trocando de entrada junto.<br>
+    KVM por software para compartilhar um teclado e um mouse entre um PC com Windows e um notebook com Linux na mesma rede local, com troca da entrada do monitor por DDC/CI.<br>
   </p>
 
 [![Release](https://img.shields.io/github/v/release/gabrielgriffo/lan-kvm?color=blue)](https://github.com/gabrielgriffo/lan-kvm/releases/latest) [![License](https://img.shields.io/github/license/gabrielgriffo/lan-kvm?label=license&color=yellow)](LICENSE) [![Built with Rust](https://img.shields.io/badge/built_with-Rust-orange)](https://www.rust-lang.org/)
@@ -19,166 +19,129 @@
 
 </div>
 
-Empurre o mouse para fora da borda da tela e ele continua no notebook, como num segundo monitor. Ou
-bata duas vezes no topo da tela e o monitor troca para o notebook levando o mouse e o teclado junto.
-O clipboard vai com você, e nada sai da sua rede.
+O Lan Kvm transfere o controle do teclado e do mouse do PC para o notebook quando o ponteiro ultrapassa a borda configurada da tela, como em uma configuração de múltiplos monitores. A troca também pode ser acionada por um gesto na borda superior da tela, que alterna a entrada do monitor e transfere o controle para o sistema exibido. A área de transferência é sincronizada a cada troca, e toda a comunicação ocorre diretamente entre as duas máquinas, sem servidores intermediários.
 
 ## Início rápido
 
-1. **Instale no notebook.**
+1. **Instale o receptor no notebook.**
 
    ```sh
    sudo apt install ./lan-kvm_<versão>_amd64.deb
    ```
 
-   Saia da sessão e entre de novo. O receptor inicia sozinho com a sessão gráfica e escuta na porta
-   TCP 24801. Se o firewall do notebook estiver ativo, libere essa porta para o PC.
+   Encerre a sessão e entre novamente. O receptor é iniciado com a sessão gráfica e aguarda conexões na porta TCP 24801. Se houver firewall ativo no notebook, libere essa porta para o endereço do PC.
 
-2. **Instale no PC.** Rode o `lan-kvm-<versão>-windows-setup.exe`. Se o Windows mostrar "O Windows
-   protegeu o computador", escolha Mais informações e depois Executar assim mesmo.
+2. **Instale o aplicativo no PC.** Execute `lan-kvm-<versão>-windows-setup.exe`. Caso o SmartScreen exiba "O Windows protegeu o computador", selecione **Mais informações** e depois **Executar assim mesmo**.
 
-3. **Pareie.** Na janela do Lan Kvm, digite o IP ou o nome do notebook, escolha a posição dele e
-   clique em Salvar. Depois clique em Parear com o notebook: aparece um código de 6 dígitos numa
-   notificação do notebook. Digite o código no PC. O pareamento é feito uma vez só.
+3. **Faça o pareamento.** Na janela do Lan Kvm, informe o IP ou o nome do notebook, selecione a posição dele e clique em **Salvar**. Em seguida, clique em **Parear com o notebook**: um código de 6 dígitos é exibido em uma notificação no notebook. Digite esse código no PC. O pareamento é necessário apenas uma vez.
 
-4. **Atravesse.** Empurre o mouse pela borda do lado em que o notebook está. Para voltar, empurre
-   pela borda oposta do notebook. Ctrl+Alt+Backspace devolve o controle ao Windows a qualquer momento.
+4. **Transfira o controle.** Mova o ponteiro além da borda correspondente à posição do notebook. Para retornar, mova-o além da borda oposta na tela do notebook. O atalho Ctrl+Alt+Backspace devolve o controle ao Windows a qualquer momento.
 
 ## Interface
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="assets/janela-claro.png">
-    <img src="assets/janela-escuro.png" width="420" alt="Janela do Lan Kvm conectada ao notebook: endereço, posição, opções de troca de monitor por duas batidas no topo e o status da conexão no rodapé">
+    <img src="assets/janela-escuro.png" width="420" alt="Janela do Lan Kvm conectada ao notebook: endereço, posição, monitor secundário, opções de troca de monitor por dois toques no topo e o status da conexão no rodapé">
   </picture>
 </p>
 
-## O que faz
+## Funcionalidades
 
-- **Atravessa pela borda.** O mouse sai pela borda do PC e entra no notebook na mesma altura
-  proporcional. A borda pode ficar à esquerda, à direita ou desativada, e os 5% de cima e de baixo
-  podem ficar protegidos para não trocar de tela sem querer.
-- **Troca o monitor junto.** Com um monitor ligado nas duas máquinas, o Lan Kvm troca a entrada dele
-  por DDC/CI no mesmo momento em que o controle passa: o PC pede a entrada do notebook e o notebook
-  pede a do PC na volta.
-- **Duas batidas no topo.** Bata o mouse duas vezes na borda de cima, em menos de 1 s, e o monitor
-  alterna entre o PC e o notebook, com o mouse e o teclado indo para quem aparecer na tela. Cada
-  lado lembra onde o mouse estava e ele volta para lá.
-- **Funciona nos dois sentidos.** O touchpad e o teclado do próprio notebook também atravessam para o
-  PC pela borda voltada para ele.
-- **O mouse tem a mesma sensação.** O notebook reproduz a velocidade e a aceleração do mouse
-  configuradas no Windows, então o ponteiro anda igual nas duas telas.
-- **Leva o clipboard.** O texto copiado vai junto a cada troca de controle, nos dois sentidos.
-- **Leva o som e o microfone.** Opcional: o som do notebook toca no fone do PC e o microfone do PC
-  vira o microfone do notebook enquanto estiverem conectados.
-- **Devolve o monitor ao desligar.** Se o notebook for desligado, se você sair da sessão nele ou se a
-  conexão cair com o monitor no notebook, a entrada volta para o PC.
-- **Fica na bandeja.** Fechar a janela mantém o Lan Kvm rodando na bandeja, e ele pode iniciar com o
-  Windows. Abrir o app de novo só traz a janela que já está aberta para a frente.
-- **Só na sua rede.** O PC fala direto com o notebook, cifrado, depois de um pareamento com código.
-  Não há conta, servidor no meio, telemetria nem verificação de atualizações. Mais em
-  [SECURITY.md](SECURITY.md).
+- **Transição pela borda.** O ponteiro sai pela borda do PC e entra no notebook na mesma altura proporcional. A borda pode ficar à esquerda, à direita ou desativada, e as faixas de 5% no topo e na base podem ser bloqueadas para evitar trocas acidentais.
+- **Troca da entrada do monitor.** Com um monitor conectado às duas máquinas, a entrada é alterada por DDC/CI no momento da transferência do controle: o PC seleciona a entrada do notebook, e o notebook seleciona a do PC no retorno.
+- **Gesto de dois toques.** Dois toques do ponteiro na borda superior, em menos de 1 s, alternam a entrada do monitor entre o PC e o notebook e transferem o teclado e o mouse para o sistema exibido. A última posição do ponteiro em cada tela é restaurada.
+- **Monitor secundário.** Com o monitor principal exibindo o notebook, o ponteiro pode sair pela borda lateral configurada e retornar ao PC no monitor adjacente, sem alterar a entrada do principal.
+- **Controle bidirecional.** O teclado e o touchpad do notebook também controlam o PC pela borda voltada para ele.
+- **Aceleração equivalente.** O PC aplica a curva de aceleração e a velocidade configuradas no Windows ao movimento enviado, de modo que o ponteiro se comporta igual nas duas telas.
+- **Área de transferência.** O texto copiado é sincronizado a cada troca de controle, nos dois sentidos.
+- **Áudio.** Opcionalmente, a saída de áudio do notebook é reproduzida no dispositivo do PC, e o microfone do PC é disponibilizado como entrada no notebook.
+- **Retorno do monitor.** Se o notebook for desligado, a sessão for encerrada ou a conexão cair com o monitor na entrada do notebook, a entrada do PC é restaurada.
+- **Execução em segundo plano.** Ao fechar a janela, o Lan Kvm permanece na área de notificação, e pode ser iniciado com o Windows. Uma nova execução apenas traz a instância existente para o primeiro plano.
+- **Comunicação local.** O PC se conecta diretamente ao notebook por um canal cifrado e autenticado, estabelecido após o pareamento. Não há conta, servidor intermediário, telemetria nem verificação de atualizações. Detalhes em [SECURITY.md](SECURITY.md).
 
 ## Configurações
 
-Tudo fica numa janela só, no PC. O notebook não tem configuração própria.
+Todas as opções ficam na janela do PC. O receptor no notebook não tem configuração própria.
 
-| Opção | O que faz |
+| Opção | Descrição |
 |---|---|
 | Notebook | IP ou nome do notebook na rede. |
-| Posição | Em que lado do PC o notebook fica: à esquerda, à direita ou desativado (só as duas batidas trocam). |
-| Esquecer pareamento | Apaga o segredo do pareamento neste PC. |
-| Ativado | Liga e desliga o Lan Kvm sem fechar o app. |
-| Proteger os cantos da borda | Os 5% de cima e de baixo da borda não trocam de tela. |
-| Trocar a entrada do monitor junto com o controle | Escolhe o monitor e as entradas do PC e do notebook. |
-| Trocar a entrada do monitor com duas batidas no topo | Liga as duas batidas, com o mesmo monitor e as mesmas entradas. |
-| Usar o fone e o microfone do PC no notebook | Leva o som e o microfone, mostrando o dispositivo usado em cada lado. |
-| Iniciar com o Windows | Abre o Lan Kvm na bandeja ao entrar no Windows. |
+| Posição | Lado do PC em que o notebook está: à esquerda, à direita ou desativado (troca apenas pelos dois toques). |
+| Monitor secundário | Disponível apenas com a Posição desativada. Lado do monitor principal em que fica outro monitor do PC, usado como saída enquanto o notebook está em exibição. |
+| Esquecer pareamento | Remove o segredo do pareamento deste PC. |
+| Ativado | Ativa ou desativa o Lan Kvm sem encerrar o aplicativo. |
+| Proteger os cantos da borda | Impede a troca nas faixas de 5% superior e inferior da borda. |
+| Trocar a entrada do monitor junto com o controle | Define o monitor e as entradas do PC e do notebook. |
+| Trocar a entrada do monitor com dois toques no topo | Ativa o gesto, com monitor e entradas próprios. |
+| Usar o fone e o microfone do PC no notebook | Ativa o áudio e exibe o dispositivo em uso em cada lado. |
+| Iniciar com o Windows | Inicia o Lan Kvm na área de notificação ao entrar no Windows. |
 
-O status da conexão fica no rodapé da janela e na cor do ícone da bandeja: cinza desativado,
-laranja esperando o notebook, verde conectado e azul-turquesa com o controle no notebook.
+O estado da conexão é exibido no rodapé da janela e pela cor do ícone na área de notificação: cinza (desativado), laranja (aguardando o notebook), verde (conectado) e azul-turquesa (controle no notebook).
 
-## Limites conhecidos
+## Limitações conhecidas
 
-- **Só um PC com Windows e um notebook com Linux.** Não há suporte a macOS, a duas máquinas Windows
-  ou a mais de um notebook.
-- **Requisitos.** PC com Windows 10 ou 11, 64 bits. Notebook com Ubuntu 22.04 ou mais novo (glibc
-  2.35+), 64 bits. Os dois precisam estar na mesma versão do Lan Kvm.
-- **Só X11 no notebook.** No Wayland o receptor não consegue injetar nem capturar o mouse e o teclado.
-- **Arquivos não atravessam**, só texto no clipboard, até 1 MiB.
-- **A troca de monitor depende do monitor.** Ele precisa aceitar DDC/CI, e alguns numeram as entradas
-  fora do padrão: vale o código que funcionar.
-- **O instalador do Windows não é assinado.** O SmartScreen e alguns antivírus podem perguntar na
-  primeira vez.
+- **Topologia fixa.** Um PC com Windows e um notebook com Linux. Não há suporte a macOS, a pares de máquinas Windows ou a mais de um notebook.
+- **Requisitos.** PC com Windows 10 ou 11, 64 bits. Notebook com Ubuntu 22.04 ou superior (glibc 2.35+), 64 bits. As duas máquinas precisam executar a mesma versão do Lan Kvm.
+- **Somente X11.** No Wayland, o receptor não consegue injetar nem capturar eventos de teclado e mouse.
+- **Somente texto na área de transferência**, com limite de 1 MiB. Arquivos não são transferidos.
+- **Dependência do monitor.** A troca de entrada exige suporte a DDC/CI, e alguns monitores usam códigos de entrada fora do padrão; nesse caso, vale o código que funcionar.
+- **Instalador sem assinatura.** O SmartScreen e alguns antivírus podem solicitar confirmação na primeira execução.
 
-## Em detalhe
+## Detalhes técnicos
 
 <details>
 <summary><strong>Estados da conexão</strong></summary>
 
-| Status | Significado |
+| Estado | Significado |
 |---|---|
-| `Desativado` | O Lan Kvm está desligado na janela ou no menu da bandeja. |
-| `Conectando a <endereço>…` | O PC está tentando chegar ao notebook. |
-| `Sem conexão com <endereço>: <erro>` | O notebook não respondeu. Confira se ele está ligado, na sessão X11 e com a porta 24801 liberada. |
-| `Este PC ainda não está pareado com <endereço>` | Falta parear. Clique em Parear com o notebook. |
-| `Conectado a <endereço> (tela remota LxA)` | Conexão cifrada no ar, controle no PC. |
-| `Controle no notebook (<endereço>)` | O mouse e o teclado do PC estão no notebook. |
-| `Notebook controlando o PC (<endereço>)` | O touchpad e o teclado do notebook estão no PC. |
+| `Desativado` | O Lan Kvm foi desativado na janela ou no menu da área de notificação. |
+| `Conectando a <endereço>…` | O PC está tentando estabelecer a conexão com o notebook. |
+| `Sem conexão com <endereço>: <erro>` | O notebook não respondeu. Verifique se ele está ligado, em uma sessão X11 e com a porta 24801 liberada. |
+| `Este PC ainda não está pareado com <endereço>` | O pareamento não foi feito. Clique em **Parear com o notebook**. |
+| `Conectado a <endereço> (tela remota LxA)` | Conexão cifrada estabelecida, com o controle no PC. |
+| `Controle no notebook (<endereço>)` | O teclado e o mouse do PC estão controlando o notebook. |
+| `Notebook controlando o PC (<endereço>)` | O teclado e o touchpad do notebook estão controlando o PC. |
 
-Uma queda de conexão devolve o controle ao PC na hora e, se o monitor estava no notebook, ele volta
-para a entrada do PC.
-
-</details>
-
-<details>
-<summary><strong>Troca de monitor</strong></summary>
-
-O monitor só aceita comandos DDC/CI da entrada que está mostrando. Por isso o PC troca para a entrada
-do notebook e o notebook troca de volta para a do PC. No PC, Detectar lista os monitores que
-respondem e as entradas de cada um. No notebook, o pacote `.deb` carrega o módulo `i2c-dev` e libera
-o acesso ao barramento para o usuário da sessão, sem precisar de root.
-
-Para não deixar o monitor preso numa máquina sem controle, o notebook devolve a entrada do PC quando
-o receptor é encerrado: desligamento, saída da sessão ou queda da conexão.
+Quando a conexão cai, o controle retorna imediatamente ao PC e, se o monitor estava na entrada do notebook, a entrada do PC é restaurada.
 
 </details>
 
 <details>
-<summary><strong>Duas batidas no topo</strong></summary>
+<summary><strong>Troca da entrada do monitor</strong></summary>
 
-Duas batidas na borda de cima, em menos de 1 s, alternam o monitor escolhido entre a entrada do PC e
-a do notebook. Vale para o mouse do PC, esteja ele na tela do PC ou na do notebook (o touchpad do
-notebook não conta), e não depende da Posição, então dá para usar
-só as batidas com a Posição em Desativado.
+O monitor aceita comandos DDC/CI apenas pela entrada que está exibindo. Por isso, o PC seleciona a entrada do notebook, e o notebook seleciona novamente a do PC. No PC, o botão **Detectar** lista os monitores que respondem e as entradas de cada um. No notebook, o pacote `.deb` carrega o módulo `i2c-dev` e concede ao usuário da sessão acesso ao barramento, sem exigir root.
 
-Ao chegar, o mouse aparece onde estava da última vez naquela tela. Na primeira vez, ou se aquela
-posição ficou fora da tela, ele aparece no centro do monitor.
+Para que o monitor não fique preso em uma máquina sem controle, o receptor restaura a entrada do PC ao ser encerrado, seja por desligamento, fim da sessão ou queda da conexão.
 
 </details>
 
 <details>
-<summary><strong>Mouse, teclado e clipboard</strong></summary>
+<summary><strong>Gesto de dois toques e monitor secundário</strong></summary>
 
-O PC lê o movimento cru do mouse e aplica a curva de aceleração do Windows antes de enviar, então a
-velocidade no notebook é a mesma do PC. Com o controle no notebook, o cursor do Windows fica
-escondido por uma janela invisível sob ele, sem mexer nos cursores do sistema.
+Dois toques na borda superior, com intervalo de até 1 s, alternam o monitor configurado entre a entrada do PC e a do notebook. O gesto é reconhecido pelo mouse do PC, esteja o ponteiro na tela do PC ou na do notebook (o touchpad do notebook não é considerado), e funciona independentemente da Posição, inclusive com ela desativada.
 
-As teclas viajam pela posição física, então o layout que vale é o do notebook. Ctrl+Alt+Backspace é
-sempre do PC: devolve o controle ao Windows e não é enviado.
+Após a troca, o ponteiro é posicionado no último ponto em que esteve naquela tela. Na primeira troca, ou se esse ponto estiver fora da área visível, ele é centralizado no monitor.
 
-O clipboard troca de lado no momento em que o controle passa, só quando mudou desde a última troca.
-Vai só texto, até 1 MiB.
+Com a Posição desativada, a opção **Monitor secundário** indica de que lado do monitor principal, aquele cuja entrada é alternada pelos dois toques, fica outro monitor do PC. Enquanto o monitor principal exibe o notebook, o ponteiro que sai pela borda desse lado retorna ao PC no monitor adjacente, na mesma altura proporcional, sem alterar a entrada. Ao voltar desse monitor para o principal, o controle passa novamente ao notebook pela mesma borda. A saída ocorre sempre pela borda do monitor principal, mesmo que o notebook tenha outra tela naquele lado.
 
 </details>
 
 <details>
-<summary><strong>Som e microfone</strong></summary>
+<summary><strong>Teclado, mouse e área de transferência</strong></summary>
 
-Com a opção ligada, o notebook grava o próprio som e o envia para o PC, que toca no dispositivo de
-saída padrão do Windows. Na direção contrária, o microfone padrão do PC aparece como microfone no
-notebook. No notebook isso usa o PulseAudio ou o PipeWire com `pactl`, `parec` e `pacat`, que já
-vêm no Ubuntu. O áudio vai cifrado pela mesma conexão.
+O PC lê o movimento bruto do mouse (Raw Input) e aplica a curva de aceleração do Windows antes do envio, de modo que a velocidade no notebook corresponde à do PC. Com o controle no notebook, o cursor do Windows é ocultado por uma janela transparente posicionada sob ele, sem alterar os cursores do sistema.
+
+As teclas são transmitidas pela posição física (scancode), e o layout aplicado é o do notebook. O atalho Ctrl+Alt+Backspace é sempre tratado pelo PC: devolve o controle ao Windows e não é encaminhado.
+
+A área de transferência é sincronizada no momento da troca de controle, apenas quando houve alteração desde a última troca. Somente texto é transferido, com limite de 1 MiB.
+
+</details>
+
+<details>
+<summary><strong>Áudio</strong></summary>
+
+Com a opção ativada, o notebook captura a própria saída de áudio e a envia ao PC, que a reproduz no dispositivo de saída padrão do Windows. No sentido inverso, o microfone padrão do PC é disponibilizado como entrada no notebook. No notebook, o recurso usa PulseAudio ou PipeWire por meio de `pactl`, `parec` e `pacat`, já incluídos no Ubuntu. O áudio trafega cifrado pela mesma conexão.
 
 </details>
 
@@ -196,20 +159,18 @@ lan-kvm monitors                       lista monitores e entradas por DDC/CI
 lan-kvm --version                      mostra a versão
 ```
 
-No Windows instalado, o executável é `%LOCALAPPDATA%\Programs\Lan Kvm\Lan Kvm.exe`. Depois de
-pareado, o notebook recusa novos pareamentos até rodar `lan-kvm unpair` nele.
+No Windows, o executável instalado fica em `%LOCALAPPDATA%\Programs\Lan Kvm\Lan Kvm.exe`. Após o pareamento, o notebook recusa novos pareamentos até que `lan-kvm unpair` seja executado nele.
 
 </details>
 
 <details>
-<summary><strong>Compilar a partir do código</strong></summary>
+<summary><strong>Compilação</strong></summary>
 
 Pré-requisitos:
 
-- [Rust](https://www.rust-lang.org/tools/install) 1.99 ou mais novo, toolchain `stable`
-- No Windows, para o instalador: [Inno Setup 6](https://jrsoftware.org/isinfo.php)
-- No Linux: `pkg-config` e os pacotes de desenvolvimento do X11 (`libx11-dev`, `libxi-dev`,
-  `libxtst-dev`, `libxcb1-dev`, `libxkbcommon-dev`, `libxkbcommon-x11-dev`), ou Docker
+- [Rust](https://www.rust-lang.org/tools/install) 1.99.1, versão fixada em `rust-toolchain.toml`
+- No Windows, para gerar o instalador: [Inno Setup 6](https://jrsoftware.org/isinfo.php)
+- No Linux: `pkg-config` e os pacotes de desenvolvimento do X11 (`libx11-dev`, `libxi-dev`, `libxtst-dev`, `libxcb1-dev`, `libxkbcommon-dev`, `libxkbcommon-x11-dev`), ou Docker
 
 ```powershell
 # Windows: fmt, clippy, testes e build release
@@ -220,31 +181,25 @@ Pré-requisitos:
 ```
 
 ```sh
-# Linux: compila e testa num container Ubuntu 22.04
+# Linux: compila e testa em um container Ubuntu 22.04
 bash scripts/build-linux-docker.sh
 
 # Linux: gera o .deb a partir do binário
 bash scripts/package-deb.sh <binário>
 ```
 
-Do PC, `.\scripts\build-linux-remote.ps1 -Target usuario@notebook -Install` copia o código para o
-notebook, compila lá no container e instala o receptor em `~/.local/bin`.
+A partir do PC, `.\scripts\build-linux-remote.ps1 -Target usuario@notebook -Install` copia o código para o notebook, compila no container e instala o receptor em `~/.local/bin`.
 
-O código fica em dois crates: `crates/core` tem o protocolo, o pareamento, a cifra, as regras de
-troca de tela e a aceleração do mouse, sem depender de sistema; `crates/app` tem o Windows
-(interface, captura, DDC) e o Linux X11 (receptor, captura, DDC).
+O código é dividido em dois crates. `crates/core` contém o protocolo, o pareamento, a criptografia, as regras de troca de tela e a aceleração do mouse, sem dependências de sistema operacional. `crates/app` contém a parte do Windows (interface, captura e DDC) e a do Linux X11 (receptor, captura e DDC).
 
 </details>
 
 ## Licença e suporte
 
-Distribuído sob a licença MIT. Veja [LICENSE](LICENSE).
+Distribuído sob a licença MIT. Consulte [LICENSE](LICENSE).
 
-O Lan Kvm é mantido por uma pessoa só. Issues são bem-vindas e lidas, mas sem prazo garantido de
-resposta. Falhas de segurança devem ser avisadas em particular, como diz o [SECURITY.md](SECURITY.md).
+O Lan Kvm é mantido por uma única pessoa. Issues são bem-vindas, mas não há prazo garantido de resposta. Vulnerabilidades devem ser reportadas de forma privada, conforme descrito em [SECURITY.md](SECURITY.md).
 
-Um relato de problema fica bem mais fácil de resolver com o log das duas máquinas:
-`%LOCALAPPDATA%\lan-kvm\lan-kvm.log` no PC e `~/.local/state/lan-kvm/recv.log` no notebook. Eles têm
-endereços IP e nomes de monitores, então confira antes de anexar.
+Ao relatar um problema, anexe os logs das duas máquinas: `%LOCALAPPDATA%\lan-kvm\lan-kvm.log` no PC e `~/.local/state/lan-kvm/recv.log` no notebook. Eles contêm endereços IP e nomes de monitores; revise o conteúdo antes de publicá-lo.
 
 MIT © [Gabriel Griffo](https://github.com/gabrielgriffo)

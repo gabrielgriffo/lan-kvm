@@ -5,6 +5,7 @@ pub struct Config {
     pub address: String,
     pub side: Side,
     pub edges: bool,
+    pub secondary: Option<Side>,
     pub enabled: bool,
     pub protect_corners: bool,
     pub monitor_switch: bool,
@@ -35,6 +36,7 @@ impl Default for Config {
             address: String::new(),
             side: Side::Right,
             edges: true,
+            secondary: None,
             enabled: true,
             protect_corners: false,
             monitor_switch: false,
@@ -73,6 +75,12 @@ impl Config {
                 "edges" => match value {
                     "true" => config.edges = true,
                     "false" => config.edges = false,
+                    _ => {}
+                },
+                "secondary" => match value {
+                    "left" => config.secondary = Some(Side::Left),
+                    "right" => config.secondary = Some(Side::Right),
+                    "off" => config.secondary = None,
                     _ => {}
                 },
                 "enabled" => match value {
@@ -138,8 +146,13 @@ impl Config {
             Side::Left => "left",
             Side::Right => "right",
         };
+        let secondary = match self.secondary {
+            Some(Side::Left) => "left",
+            Some(Side::Right) => "right",
+            None => "off",
+        };
         format!(
-            "address = {}\nside = {side}\nedges = {}\nenabled = {}\nprotect_corners = {}\n\
+            "address = {}\nside = {side}\nedges = {}\nsecondary = {secondary}\nenabled = {}\nprotect_corners = {}\n\
              monitor_switch = {}\nmonitor_guard = {}\nmonitor = {}\npc_input = 0x{:02X}\nnotebook_input = 0x{:02X}\n\
              tap_switch = {}\ntap_monitor = {}\ntap_pc_input = 0x{:02X}\ntap_notebook_input = 0x{:02X}\naudio = {}\n",
             self.address.trim(),
@@ -170,6 +183,7 @@ mod tests {
             address: "192.168.0.18:24801".to_string(),
             side: Side::Left,
             edges: false,
+            secondary: Some(Side::Left),
             enabled: false,
             protect_corners: true,
             monitor_switch: true,
@@ -221,5 +235,14 @@ mod tests {
         assert!(config.edges);
         assert!(!Config::parse("edges = false\n").edges);
         assert!(Config::parse("edges = nao\n").edges);
+        assert_eq!(Config::parse("secondary = cima\n").secondary, None);
+        assert_eq!(
+            Config::parse("secondary = right\n").secondary,
+            Some(Side::Right)
+        );
+        assert_eq!(
+            Config::parse("secondary = right\nsecondary = off\n").secondary,
+            None
+        );
     }
 }

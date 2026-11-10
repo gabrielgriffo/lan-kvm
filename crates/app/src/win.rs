@@ -16,7 +16,7 @@ use lan_kvm_core::pairing::{pair_initiator, reply_text, MODE_PAIR, MODE_SESSION,
 use lan_kvm_core::proto::{Button, Message, PROTOCOL_VERSION};
 use lan_kvm_core::puppet::{Puppet, PuppetMove};
 use lan_kvm_core::secure::{handshake_initiator, Key, SecureReader, SecureWriter};
-use lan_kvm_core::switch::{Action, Rect, Side, Switcher};
+use lan_kvm_core::switch::{neighbor, Action, Bridge, Rect, Side, Switcher};
 use lan_kvm_core::tap::{arrival, restful, top_distance, LastSpot, TopTaps};
 use windows_sys::Win32::Foundation::{HMODULE, HWND};
 use windows_sys::Win32::Foundation::{LPARAM, LRESULT, POINT, RECT, WPARAM};
@@ -38,6 +38,7 @@ use windows_sys::Win32::UI::Input::{
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 use crate::audio_win;
+use crate::ddc_win;
 use crate::inject::{self, Injection};
 use crate::keystore;
 use crate::monitor::{self, Choice};
@@ -110,6 +111,7 @@ struct Link {
     side: Side,
     preferred: usize,
     controlled: Option<Controlled>,
+    lg_main: Option<usize>,
 }
 
 impl Link {
@@ -117,6 +119,53 @@ impl Link {
         if self.taps.update(distance, Instant::now()) && monitor::tap_enabled() {
             monitor::tap_toggle(self.tx.clone(), follow_monitor);
         }
+    }
+
+    fn tap_screen(&self) -> Rect {
+        monitor::tap_name()
+            .and_then(|name| {
+                self.remote_screens
+                    .iter()
+                    .find(|(_, n)| same_monitor(n, &name))
+                    .map(|(r, _)| *r)
+            })
+            .unwrap_or_else(|| self.switcher.remote_area())
+    }
+
+    fn refresh_bridge(&mut self) {
+        let side = *SECONDARY.lock().unwrap();
+        let bridge = match (side, self.lg_main) {
+            (Some(side), Some(main)) if !self.switcher.edges() => {
+                match neighbor(&self.monitors, main, side) {
+                    Some(second) => Some(Bridge {
+                        side,
+                        main,
+                        second,
+                        screen: self.tap_screen(),
+                    }),
+                    None => {
+                        log_warn!(
+                            "monitor secundário: nenhum monitor do PC encostado no lado {side:?} de {:?}",
+                            self.monitors[main]
+                        );
+                        None
+                    }
+                }
+            }
+            _ => None,
+        };
+        if bridge != self.switcher.bridge() {
+            match bridge {
+                Some(b) => log_info!(
+                    "monitor secundário: saída pela borda {:?} da tela {:?} do notebook para o monitor {:?}",
+                    b.side,
+                    b.screen,
+                    self.monitors[b.second]
+                ),
+                None => log_info!("monitor secundário: desligado"),
+            }
+        }
+        self.switcher.set_bridge(bridge);
     }
 }
 
@@ -144,6 +193,7 @@ struct Ctx {
 
 static CTX: Mutex<Option<Ctx>> = Mutex::new(None);
 static CORNER_GUARD: AtomicBool = AtomicBool::new(false);
+static SECONDARY: Mutex<Option<Side>> = Mutex::new(None);
 static AUDIO: AtomicBool = AtomicBool::new(false);
 static RAW_WINDOW: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 const WM_REGISTER_RAW: u32 = WM_APP + 1;
@@ -227,6 +277,24 @@ pub fn set_corner_guard(on: bool) {
         "proteção dos cantos da borda: {}",
         if on { "ligada" } else { "desligada" }
     );
+}
+
+pub fn set_secondary(side: Option<Side>) {
+    if std::mem::replace(&mut *SECONDARY.lock().unwrap(), side) == side {
+        return;
+    }
+    match side {
+        Some(side) => log_info!("monitor secundário: {side:?} do monitor principal"),
+        None => log_info!("monitor secundário: sem troca"),
+    }
+    if let Some(link) = CTX
+        .lock()
+        .unwrap()
+        .as_mut()
+        .and_then(|ctx| ctx.link.as_mut())
+    {
+        link.refresh_bridge();
+    }
 }
 
 pub fn start() -> Result<(), Box<dyn Error>> {
@@ -471,6 +539,9 @@ fn on_raw_delta(dx: i32, dy: i32) {
 fn follow_monitor(to_notebook: bool) {
     let mut warp = None;
     let mut hide = false;
+    let lg = to_notebook
+        .then(|| monitor::tap_name().and_then(|name| ddc_win::screen_of(&name)))
+        .flatten();
     {
         let mut guard = CTX.lock().unwrap();
         let Some(link) = guard.as_mut().and_then(|ctx| ctx.link.as_mut()) else {
@@ -487,24 +558,25 @@ fn follow_monitor(to_notebook: bool) {
                 .iter()
                 .position(|m| m.contains(cursor.x, cursor.y))
                 .unwrap_or(link.preferred);
-            let screen = monitor::tap_name()
-                .and_then(|name| {
-                    link.remote_screens
-                        .iter()
-                        .find(|(_, n)| same_monitor(n, &name))
-                        .map(|(r, _)| *r)
-                })
-                .unwrap_or_else(|| link.switcher.remote_area());
-            let at = arrival(link.remote_spot.get(), screen);
+            link.lg_main = Some(
+                lg.and_then(|r| link.monitors.iter().position(|m| *m == r))
+                    .unwrap_or(entry),
+            );
+            let at = arrival(link.remote_spot.get(), link.tap_screen());
             if let Some(Action::Enter { x, y }) = link.switcher.force_enter_at(entry, at) {
-                log_info!("duas batidas no topo: controle passou para o notebook em {x}, {y}");
+                log_info!("dois toques no topo: controle passou para o notebook em {x}, {y}");
                 link.ballistics = mouse_speed::ballistics();
                 link.reports.reset();
                 link.taps.reset();
                 let _ = link.tx.send(Message::Enter { x, y });
                 hide = true;
             }
-        } else if let Some(Action::Leave { x, y }) = link.switcher.force_leave() {
+            link.refresh_bridge();
+        } else if let Some(Action::Leave { x, y }) = {
+            link.lg_main = None;
+            link.refresh_bridge();
+            link.switcher.force_leave()
+        } {
             let _ = link.tx.send(Message::Leave);
             link.taps.reset();
             let back = link.monitors.iter().find(|m| m.contains(x, y));
@@ -628,6 +700,7 @@ fn connection_loop() {
                             side: target.side,
                             preferred,
                             controlled: None,
+                            lg_main: None,
                         };
                         let reason = session(stream, reader, writer, link, generation);
                         log_warn!("desconectado: {reason}");

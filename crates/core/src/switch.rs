@@ -41,6 +41,32 @@ enum State {
     Remote { x: i32, y: i32, entry: usize },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bridge {
+    pub side: Side,
+    pub main: usize,
+    pub second: usize,
+    pub screen: Rect,
+}
+
+pub fn neighbor(monitors: &[Rect], main: usize, side: Side) -> Option<usize> {
+    let m = *monitors.get(main)?;
+    monitors
+        .iter()
+        .enumerate()
+        .filter(|&(i, r)| {
+            i != main
+                && match side {
+                    Side::Right => r.x == m.x + m.w,
+                    Side::Left => r.x + r.w == m.x,
+                }
+        })
+        .map(|(i, r)| (i, (r.y + r.h).min(m.y + m.h) - r.y.max(m.y)))
+        .filter(|&(_, overlap)| overlap > 0)
+        .max_by_key(|&(_, overlap)| overlap)
+        .map(|(i, _)| i)
+}
+
 pub struct Switcher {
     monitors: Vec<Rect>,
     remote_w: i32,
@@ -49,6 +75,8 @@ pub struct Switcher {
     state: State,
     corner_guard: bool,
     edges: bool,
+    bridge: Option<Bridge>,
+    last_local: Option<(i32, i32)>,
 }
 
 pub const CORNER_PERCENT: i32 = 5;
@@ -75,6 +103,50 @@ impl Switcher {
             state: State::Local,
             corner_guard: false,
             edges: true,
+            bridge: None,
+            last_local: None,
+        }
+    }
+
+    pub fn set_bridge(&mut self, bridge: Option<Bridge>) {
+        let n = self.monitors.len();
+        self.bridge =
+            bridge.filter(|b| b.main < n && b.second < n && b.screen.w > 0 && b.screen.h > 0);
+    }
+
+    pub fn bridge(&self) -> Option<Bridge> {
+        self.bridge
+    }
+
+    fn cross_out(&mut self, b: Bridge, ry: i32) -> Action {
+        let s = self.monitors[b.second];
+        let x = match b.side {
+            Side::Right => s.x + 1,
+            Side::Left => s.right() - 1,
+        };
+        let y = s.y + scale(ry - b.screen.y, b.screen.h, s.h);
+        self.state = State::Local;
+        self.last_local = Some((x, y));
+        Action::Leave { x, y }
+    }
+
+    fn cross_in(&mut self, b: Bridge, py: i32) -> Action {
+        let s = self.monitors[b.second];
+        let x = match b.side {
+            Side::Right => b.screen.right(),
+            Side::Left => b.screen.x,
+        }
+        .clamp(0, self.remote_w - 1);
+        let y = (b.screen.y + scale(py - s.y, s.h, b.screen.h)).clamp(0, self.remote_h - 1);
+        self.state = State::Remote {
+            x,
+            y,
+            entry: b.main,
+        };
+        self.last_local = None;
+        Action::Enter {
+            x: x as u16,
+            y: y as u16,
         }
     }
 
@@ -128,18 +200,29 @@ impl Switcher {
     }
 
     pub fn force_leave(&mut self) -> Option<Action> {
-        match self.state {
-            State::Remote { y, entry, .. } => Some(self.leave(entry, y)),
-            State::Local => None,
+        match (self.state, self.bridge) {
+            (State::Remote { y, .. }, Some(b)) => Some(self.cross_out(b, y)),
+            (State::Remote { y, entry, .. }, None) => Some(self.leave(entry, y)),
+            (State::Local, _) => None,
         }
     }
 
     pub fn on_motion(&mut self, px: i32, py: i32) -> Action {
         match self.state {
-            State::Local => match self.edge_monitor(px, py) {
-                Some(i) => self.enter(i, py),
-                None => Action::Pass,
-            },
+            State::Local => {
+                let from = self.last_local.replace((px, py));
+                if let Some(b) = self.bridge {
+                    let from_second =
+                        from.is_some_and(|(x, y)| self.monitors[b.second].contains(x, y));
+                    if from_second && self.monitors[b.main].contains(px, py) {
+                        return self.cross_in(b, py);
+                    }
+                }
+                match self.edge_monitor(px, py) {
+                    Some(i) => self.enter(i, py),
+                    None => Action::Pass,
+                }
+            }
             State::Remote { .. } => Action::Block,
         }
     }
@@ -150,6 +233,16 @@ impl Switcher {
             State::Remote { x, y, entry } => {
                 let nx = x + dx;
                 let ny = (y + dy).clamp(0, self.remote_h - 1);
+                if let Some(b) = self.bridge.filter(|b| b.screen.contains(x, y)) {
+                    let out = match b.side {
+                        Side::Right => nx > b.screen.right(),
+                        Side::Left => nx < b.screen.x,
+                    };
+                    if out {
+                        return self
+                            .cross_out(b, ny.clamp(b.screen.y, b.screen.y + b.screen.h - 1));
+                    }
+                }
                 let leaving = match self.side {
                     Side::Right => nx < 0,
                     Side::Left => nx >= self.remote_w,
@@ -216,6 +309,7 @@ impl Switcher {
         };
         let y = m.y + scale(ry, self.remote_h, m.h);
         self.state = State::Local;
+        self.last_local = Some((x, y));
         Action::Leave { x, y }
     }
 }
@@ -409,6 +503,125 @@ mod tests {
         assert!(!s.is_remote());
         s.set_edges(true);
         assert!(matches!(s.on_motion(2559, 500), Action::Enter { .. }));
+    }
+
+    fn pc_with_second_on_the_right() -> Vec<Rect> {
+        vec![
+            Rect {
+                x: 0,
+                y: 0,
+                w: 2560,
+                h: 1080,
+            },
+            Rect {
+                x: 2560,
+                y: 100,
+                w: 1920,
+                h: 1080,
+            },
+        ]
+    }
+
+    const NOTEBOOK_LG: Rect = Rect {
+        x: 1920,
+        y: 0,
+        w: 2560,
+        h: 1080,
+    };
+
+    fn bridged(side: Side) -> Switcher {
+        let mut s = Switcher::new(pc_with_second_on_the_right(), (4480, 1080), Side::Right);
+        s.set_edges(false);
+        s.set_bridge(Some(Bridge {
+            side,
+            main: 0,
+            second: 1,
+            screen: NOTEBOOK_LG,
+        }));
+        s
+    }
+
+    #[test]
+    fn neighbor_is_the_monitor_touching_the_chosen_side() {
+        let pc = pc_with_second_on_the_right();
+        assert_eq!(neighbor(&pc, 0, Side::Right), Some(1));
+        assert_eq!(neighbor(&pc, 0, Side::Left), None);
+        assert_eq!(neighbor(&pc, 1, Side::Left), Some(0));
+        assert_eq!(neighbor(&desk(), 0, Side::Left), Some(2));
+        assert_eq!(neighbor(&desk(), 0, Side::Right), None);
+        assert_eq!(neighbor(&desk(), 7, Side::Right), None);
+    }
+
+    #[test]
+    fn leaving_the_main_screen_on_the_notebook_lands_on_the_second_monitor() {
+        let mut s = bridged(Side::Right);
+        s.force_enter_at(0, (4000, 540));
+        assert_eq!(s.on_delta(479, 0), Action::Motion { x: 4479, y: 540 });
+        assert_eq!(s.on_delta(1, 0), Action::Leave { x: 2561, y: 640 });
+        assert!(!s.is_remote());
+    }
+
+    #[test]
+    fn other_notebook_screens_are_reached_normally_and_never_bridge() {
+        let mut s = bridged(Side::Right);
+        s.force_enter_at(0, (2000, 500));
+        assert_eq!(s.on_delta(-200, 0), Action::Motion { x: 1800, y: 500 });
+        assert_eq!(s.on_delta(-5000, 0), Action::Motion { x: 0, y: 500 });
+        assert_eq!(s.on_delta(-10, 0), Action::Block);
+        assert!(s.is_remote());
+    }
+
+    #[test]
+    fn the_bridge_always_leaves_from_the_main_screen_even_toward_another_notebook_screen() {
+        let mut s = bridged(Side::Left);
+        s.force_enter_at(0, (1925, 1079));
+        assert_eq!(s.on_delta(-10, 0), Action::Leave { x: 4478, y: 1179 });
+    }
+
+    #[test]
+    fn crossing_from_the_second_monitor_into_the_main_one_goes_back_to_the_notebook() {
+        let mut s = bridged(Side::Right);
+        s.force_enter_at(0, (4479, 540));
+        assert_eq!(s.on_delta(5, 0), Action::Leave { x: 2561, y: 640 });
+        assert_eq!(s.on_motion(2600, 640), Action::Pass);
+        assert_eq!(s.on_motion(2559, 640), Action::Enter { x: 4479, y: 540 });
+        assert!(s.is_remote());
+        assert_eq!(s.on_motion(100, 100), Action::Block);
+    }
+
+    #[test]
+    fn moving_inside_the_main_monitor_alone_does_not_enter() {
+        let mut s = bridged(Side::Right);
+        assert_eq!(s.on_motion(100, 100), Action::Pass);
+        assert_eq!(s.on_motion(2000, 500), Action::Pass);
+        assert!(!s.is_remote());
+        s.set_bridge(None);
+        assert_eq!(s.on_motion(2600, 500), Action::Pass);
+        assert_eq!(s.on_motion(2500, 500), Action::Pass);
+        assert!(!s.is_remote());
+    }
+
+    #[test]
+    fn force_leave_with_a_bridge_returns_to_the_second_monitor() {
+        let mut s = bridged(Side::Right);
+        s.force_enter_at(0, (3000, 1079));
+        assert_eq!(s.force_leave(), Some(Action::Leave { x: 2561, y: 1179 }));
+        s.set_bridge(None);
+        s.force_enter_at(0, (3000, 0));
+        assert_eq!(s.force_leave(), Some(Action::Leave { x: 2558, y: 0 }));
+    }
+
+    #[test]
+    fn invalid_bridges_are_ignored() {
+        let mut s = bridged(Side::Right);
+        assert!(s.bridge().is_some());
+        s.set_bridge(Some(Bridge {
+            side: Side::Right,
+            main: 0,
+            second: 5,
+            screen: NOTEBOOK_LG,
+        }));
+        assert_eq!(s.bridge(), None);
     }
 
     #[test]

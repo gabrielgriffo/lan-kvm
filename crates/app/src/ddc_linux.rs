@@ -127,14 +127,14 @@ pub fn switch_now(name: &str, value: u8) -> Message {
     let label = input_name(value);
     match set_input(name, value) {
         Ok(()) => {
-            log_info!("duas batidas no topo: monitor {name} trocado para {label}");
+            log_info!("dois toques no topo: monitor {name} trocado para {label}");
             Message::MonitorReport {
                 ok: true,
-                detail: format!("duas batidas: trocou para {label}"),
+                detail: format!("dois toques: trocou para {label}"),
             }
         }
         Err(detail) => {
-            log_warn!("duas batidas no topo: não foi possível trocar para {label}: {detail}");
+            log_warn!("dois toques no topo: não foi possível trocar para {label}: {detail}");
             Message::MonitorReport { ok: false, detail }
         }
     }

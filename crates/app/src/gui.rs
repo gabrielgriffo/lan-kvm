@@ -158,6 +158,10 @@ fn position_of(config: &Config) -> Option<Side> {
     config.edges.then_some(config.side)
 }
 
+fn secondary_of(config: &Config) -> Option<Side> {
+    config.secondary.filter(|_| !config.edges)
+}
+
 fn config_path() -> Option<PathBuf> {
     std::env::var_os("APPDATA").map(|dir| PathBuf::from(dir).join("lan-kvm").join("config.txt"))
 }
@@ -358,6 +362,8 @@ struct App {
     config: Config,
     address: String,
     position: Option<Side>,
+    secondary: Option<Side>,
+    options_width: f32,
     autostart: bool,
     error: Option<String>,
     tray: Option<Tray>,
@@ -383,6 +389,8 @@ impl App {
             code: String::new(),
             address: config.address.clone(),
             position: position_of(&config),
+            secondary: config.secondary,
+            options_width: 250.0,
             config,
             autostart: autostart::is_enabled(),
             error,
@@ -394,6 +402,7 @@ impl App {
     }
 
     fn commit(&mut self) {
+        win::set_secondary(secondary_of(&self.config));
         win::set_target(target_of(&self.config));
         self.error = save_config(&self.config)
             .err()
@@ -455,7 +464,7 @@ impl App {
             .and_then(|l| l.iter().find(|m| same_monitor(&m.name, &chosen)).cloned());
         let salt = match section {
             Section::WithControl => "controle",
-            Section::DoubleTap => "batidas",
+            Section::DoubleTap => "toques",
         };
         let mut detect = false;
         let inputs: Vec<u8> = selected
@@ -748,31 +757,64 @@ impl eframe::App for App {
                 ui.separator();
             }
 
-            egui::Grid::new("config")
-                .num_columns(2)
-                .spacing([12.0, 8.0])
-                .show(ui, |ui| {
-                    ui.label("Notebook");
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.address)
-                            .hint_text("IP ou nome, ex.: 192.168.0.18"),
+            let row = |ui: &mut egui::Ui,
+                       label: &str,
+                       hint: Option<&str>,
+                       add: &mut dyn FnMut(&mut egui::Ui)| {
+                ui.horizontal(|ui| {
+                    let label = ui.label(label);
+                    if let Some(hint) = hint {
+                        label.on_hover_text(hint);
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        add(ui);
+                        ui.min_rect().width()
+                    })
+                    .inner
+                })
+                .inner
+            };
+            let gap = ui.spacing().item_spacing.y;
+            ui.spacing_mut().item_spacing.y = 8.0;
+            let field = [self.options_width, ui.spacing().interact_size.y];
+            row(ui, "Notebook", None, &mut |ui| {
+                ui.add_sized(
+                    field,
+                    egui::TextEdit::singleline(&mut self.address)
+                        .hint_text("IP ou nome, ex.: 192.168.0.18"),
+                );
+            });
+            self.options_width = row(ui, "Posição", None, &mut |ui| {
+                ui.radio_value(&mut self.position, None, "Desativado")
+                    .on_hover_text(
+                        "O controle não passa pela borda da tela; use os dois toques \
+                         no topo para trocar.",
                     );
-                    ui.end_row();
-                    ui.label("Posição");
-                    ui.horizontal(|ui| {
-                        ui.radio_value(&mut self.position, Some(Side::Left), "À esquerda");
-                        ui.radio_value(&mut self.position, Some(Side::Right), "À direita");
-                        ui.radio_value(&mut self.position, None, "Desativado")
-                            .on_hover_text(
-                                "O controle não passa pela borda da tela; use as duas batidas \
-                                 no topo para trocar.",
-                            );
-                    });
-                    ui.end_row();
-                });
+                ui.radio_value(&mut self.position, Some(Side::Right), "À direita");
+                ui.radio_value(&mut self.position, Some(Side::Left), "À esquerda");
+            });
+            if self.position.is_none() {
+                row(
+                    ui,
+                    "Monitor secundário",
+                    Some(
+                        "Com o monitor principal mostrando o notebook, o mouse que \
+                         sai pela borda dele deste lado volta ao PC no monitor encostado \
+                         nele, e entra de novo no notebook ao voltar para o monitor \
+                         principal.",
+                    ),
+                    &mut |ui| {
+                        ui.radio_value(&mut self.secondary, None, "Desativado");
+                        ui.radio_value(&mut self.secondary, Some(Side::Right), "À direita");
+                        ui.radio_value(&mut self.secondary, Some(Side::Left), "À esquerda");
+                    },
+                );
+            }
+            ui.spacing_mut().item_spacing.y = gap;
 
             let changed = self.address.trim() != self.config.address.trim()
-                || self.position != position_of(&self.config);
+                || self.position != position_of(&self.config)
+                || (self.position.is_none() && self.secondary != self.config.secondary);
             ui.add_space(4.0);
             let paired = !matches!(status, Status::NotPaired { .. } | Status::Disabled);
             ui.horizontal(|ui| {
@@ -784,6 +826,8 @@ impl eframe::App for App {
                     self.config.edges = self.position.is_some();
                     if let Some(side) = self.position {
                         self.config.side = side;
+                    } else {
+                        self.config.secondary = self.secondary;
                     }
                     self.commit();
                 }
@@ -838,10 +882,10 @@ impl eframe::App for App {
             if ui
                 .checkbox(
                     &mut self.config.tap_switch,
-                    "Trocar a entrada do monitor com duas batidas no topo",
+                    "Trocar a entrada do monitor com dois toques no topo",
                 )
                 .on_hover_text(
-                    "Bata o mouse duas vezes na borda de cima da tela, em menos de 1 s, \
+                    "Toque a borda de cima da tela duas vezes com o ponteiro, em menos de 1 s, \
                      para alternar o monitor entre a entrada do PC e a do notebook. \
                      O mouse e o teclado vão junto para o sistema que aparecer na tela.",
                 )
@@ -933,6 +977,7 @@ pub fn run(start_hidden: bool) -> Result<(), Box<dyn Error>> {
     win::start()?;
     let config = load_config();
     win::set_corner_guard(config.protect_corners);
+    win::set_secondary(secondary_of(&config));
     win::set_monitor(choice_of(&config));
     win::set_tap(tap_choice_of(&config));
     win::set_audio(config.audio);
@@ -1001,6 +1046,21 @@ mod tests {
         config.enabled = true;
         config.address = "   ".to_string();
         assert_eq!(target_of(&config), None);
+    }
+
+    #[test]
+    fn secondary_only_counts_without_the_edge_position() {
+        let mut config = Config {
+            secondary: Some(Side::Right),
+            edges: false,
+            ..Config::default()
+        };
+        assert_eq!(secondary_of(&config), Some(Side::Right));
+        config.edges = true;
+        assert_eq!(secondary_of(&config), None);
+        config.edges = false;
+        config.secondary = None;
+        assert_eq!(secondary_of(&config), None);
     }
 
     #[test]

@@ -5,6 +5,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use lan_kvm_core::ddc::{input_values, same_monitor, VCP_INPUT};
+use lan_kvm_core::switch::Rect;
 use windows_sys::Win32::Devices::Display::{
     CapabilitiesRequestAndCapabilitiesReply, DestroyPhysicalMonitor, DisplayConfigGetDeviceInfo,
     GetCapabilitiesStringLength, GetDisplayConfigBufferSizes,
@@ -96,7 +97,7 @@ fn friendly_names() -> HashMap<String, Vec<String>> {
     map
 }
 
-fn physical_monitors() -> Vec<Physical> {
+fn logical_monitors() -> Vec<HMONITOR> {
     unsafe extern "system" fn collect(m: HMONITOR, _: HDC, _: *mut RECT, data: LPARAM) -> i32 {
         (*(data as *mut Vec<HMONITOR>)).push(m);
         1
@@ -110,9 +111,34 @@ fn physical_monitors() -> Vec<Physical> {
             &mut logical as *mut _ as LPARAM,
         )
     };
+    logical
+}
+
+pub fn screen_of(name: &str) -> Option<Rect> {
+    let names = friendly_names();
+    logical_monitors().into_iter().find_map(|hmonitor| unsafe {
+        let mut info: MONITORINFOEXW = mem::zeroed();
+        info.monitorInfo.cbSize = mem::size_of::<MONITORINFOEXW>() as u32;
+        if GetMonitorInfoW(hmonitor, &mut info as *mut _ as *mut MONITORINFO) == 0 {
+            return None;
+        }
+        let ours = names
+            .get(&wide(&info.szDevice))
+            .is_some_and(|list| list.iter().any(|n| same_monitor(n, name)));
+        let r = info.monitorInfo.rcMonitor;
+        ours.then_some(Rect {
+            x: r.left,
+            y: r.top,
+            w: r.right - r.left,
+            h: r.bottom - r.top,
+        })
+    })
+}
+
+fn physical_monitors() -> Vec<Physical> {
     let names = friendly_names();
     let mut out = Vec::new();
-    for hmonitor in logical {
+    for hmonitor in logical_monitors() {
         unsafe {
             let mut info: MONITORINFOEXW = mem::zeroed();
             info.monitorInfo.cbSize = mem::size_of::<MONITORINFOEXW>() as u32;

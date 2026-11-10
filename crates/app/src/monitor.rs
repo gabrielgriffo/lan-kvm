@@ -158,14 +158,12 @@ pub fn tap_toggle(notebook: Sender<Message>, follow: fn(bool)) {
                 let label = input_name(value);
                 let result = match ddc_win::set_input(&name, value) {
                     Ok(()) => {
-                        log_info!("duas batidas no topo: monitor {name} trocado para {label}");
+                        log_info!("dois toques no topo: monitor {name} trocado para {label}");
                         follow(true);
-                        (true, format!("duas batidas: trocou para {label}"))
+                        (true, format!("dois toques: trocou para {label}"))
                     }
                     Err(e) => {
-                        log_warn!(
-                            "duas batidas no topo: não foi possível trocar para {label}: {e}"
-                        );
+                        log_warn!("dois toques no topo: não foi possível trocar para {label}: {e}");
                         (false, e)
                     }
                 };
@@ -173,7 +171,7 @@ pub fn tap_toggle(notebook: Sender<Message>, follow: fn(bool)) {
             }
             TapMove::Notebook(value) => {
                 log_info!(
-                    "duas batidas no topo: pedindo ao notebook a troca de {name} para {}",
+                    "dois toques no topo: pedindo ao notebook a troca de {name} para {}",
                     input_name(value)
                 );
                 let _ = notebook.send(Message::MonitorSwitch { value, name });
